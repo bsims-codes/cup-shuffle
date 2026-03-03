@@ -8,23 +8,23 @@
 // -----------------------------------------------------------------------------
 const CONFIG = {
     // Canvas dimensions
-    WIDTH: 900,
-    HEIGHT: 700,
+    WIDTH: 800,
+    HEIGHT: 600,
 
     // Cup layout
-    CUP_WIDTH: 120,
-    CUP_HEIGHT: 160,
-    CUP_SPACING: 180,
-    CUP_Y: 320,
+    CUP_WIDTH: 110,
+    CUP_HEIGHT: 145,
+    CUP_SPACING: 160,
+    CUP_Y: 280,
 
     // Morph dimensions
     MORPH_WIDTH: 60,
     MORPH_HEIGHT: 50,
 
     // UI positions
-    TITLE_Y: 80,
-    SUBTITLE_Y: 200,
-    HUD_Y: 620,
+    TITLE_Y: 70,
+    SUBTITLE_Y: 170,
+    HUD_Y: 540,
 
     // Colors
     COLORS: {
