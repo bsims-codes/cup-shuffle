@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cup Shuffle - Find Morph!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            border: 2px solid #4a4a6a;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        .controls-info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer" style="position: relative; display: inline-block;">
+        <canvas id="gameCanvas" width="900" height="700"></canvas>
+        <!-- Animated Morph - positioned over canvas when visible -->
+        <img id="morphSprite"
+             src="assets/morph-transparent.webp"
+             style="position: absolute; pointer-events: none; visibility: hidden; image-rendering: auto;">
+    </div>
+    <div class="controls-info">R: Restart | L: Leaderboard | D: Debug</div>
+    <script src="game.js"></script>
+</body>
+</html>
