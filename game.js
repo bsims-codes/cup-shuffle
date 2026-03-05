@@ -1002,7 +1002,11 @@ class CupShuffleGame {
                         this.setState(GameState.NAME_ENTRY);
                     }, 1500);
                 } else {
-                    this.subtitle = 'GAME OVER - PRESS R TO RESTART';
+                    // Show leaderboard after a delay even if score doesn't qualify
+                    this.stateTimer = setTimeout(() => {
+                        this.showLeaderboard = true;
+                        this.subtitle = 'GAME OVER - PRESS R TO RESTART';
+                    }, 1500);
                 }
                 break;
 
