@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cup Shuffle - Find Morph!</title>
+    <title>Dinner with Yzma</title>
     <style>
         * {
             margin: 0;
@@ -11,7 +11,7 @@
             box-sizing: border-box;
         }
         body {
-            background: #1a1a2e;
+            background: #1a0a2e;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -19,9 +19,9 @@
             font-family: Arial, sans-serif;
         }
         #gameCanvas {
-            border: 2px solid #4a4a6a;
+            border: 2px solid #4a2060;
             border-radius: 8px;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 20px rgba(74, 32, 96, 0.5);
         }
         .controls-info {
             position: fixed;
@@ -35,10 +35,6 @@
 <body>
     <div id="gameContainer" style="position: relative; display: inline-block;">
         <canvas id="gameCanvas" width="800" height="600"></canvas>
-        <!-- Animated Morph - positioned over canvas when visible -->
-        <img id="morphSprite"
-             src="assets/morph-transparent.webp"
-             style="position: absolute; pointer-events: none; visibility: hidden; image-rendering: auto;">
     </div>
     <div class="controls-info">R: Restart | L: Leaderboard | D: Debug</div>
     <script src="game.js"></script>

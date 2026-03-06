@@ -1,6 +1,6 @@
 // =============================================================================
-// CUP SHUFFLE GAME - Find Morph!
-// A cup shuffle minigame with placeholder graphics ready for asset replacement
+// DINNER WITH YZMA - Find the Poison!
+// A cup shuffle minigame themed after The Emperor's New Groove
 // =============================================================================
 
 // -----------------------------------------------------------------------------
@@ -26,29 +26,29 @@ const CONFIG = {
     SUBTITLE_Y: 170,
     HUD_Y: 540,
 
-    // Colors
+    // Colors - Yzma's purple/magenta palette
     COLORS: {
-        background: '#1a1a2e',
-        backgroundGradientTop: '#0f0f1a',
-        backgroundGradientBottom: '#2a2a4e',
-        platform: '#e8e8f0',
-        platformShadow: '#c0c0d0',
+        background: '#1a0a2e',
+        backgroundGradientTop: '#0d0618',
+        backgroundGradientBottom: '#2d1b4e',
+        platform: '#4a3728',        // Wooden dinner table
+        platformShadow: '#2e2218',
+        platformHighlight: '#6b5240',
         cup: '#d4c896',
         cupHighlight: '#f0e8c0',
         cupShadow: '#a09060',
         cupRim: '#e8dca8',
-        morph: '#ff6b9d',
-        morphHighlight: '#ff9bc0',
-        morphEye: '#ffffff',
-        morphPupil: '#222222',
-        title: '#4ac3e0',
-        subtitle: '#4ac3e0',
+        poison: '#7fff00',          // Bright green poison
+        poisonGlow: '#00ff00',
+        title: '#d4af37',           // Gold
+        subtitle: '#e6c84b',        // Light gold
         hudText: '#ffffff',
-        hudLabel: '#8888aa',
+        hudLabel: '#b088cc',        // Light purple
+        hudBg: 'rgba(45, 27, 78, 0.9)',
         debugText: '#00ff00',
         debugSlot: 'rgba(255, 255, 0, 0.3)',
         gold: '#ffd700',
-        leaderboardBg: 'rgba(0, 0, 0, 0.9)'
+        leaderboardBg: 'rgba(26, 10, 46, 0.95)'
     },
 
     // Timing (ms)
@@ -60,7 +60,12 @@ const CONFIG = {
     // Game settings
     INITIAL_CHANCES: 3,
     BASE_SCORE: 50,
-    STREAK_BONUS: 25
+    STREAK_BONUS: 25,
+
+    // Hand animation settings
+    HAND_WIDTH: 150,
+    HAND_HEIGHT: 120,
+    HAND_OFFSET_Y: 40  // How far below cup center the hand appears
 };
 
 // FIXED slot positions - these NEVER change
@@ -69,6 +74,57 @@ const SLOTS = [
     { x: CONFIG.WIDTH / 2, y: CONFIG.CUP_Y },
     { x: CONFIG.WIDTH / 2 + CONFIG.CUP_SPACING, y: CONFIG.CUP_Y }
 ];
+
+// -----------------------------------------------------------------------------
+// EMPEROR'S NEW GROOVE QUOTES
+// -----------------------------------------------------------------------------
+const QUOTES = {
+    intro: [
+        "PICK YOUR POISON!",
+        "OH RIGHT, THE POISON...",
+        "KUZCO'S POISON...",
+        "THE POISON FOR KUZCO...",
+        "PULL THE LEVER, KRONK!"
+    ],
+    watch: [
+        "WATCH THE POISON!",
+        "THAT POISON?",
+        "THE POISON CHOSEN TO KILL KUZCO",
+        "WRONG LEVER!"
+    ],
+    guess: [
+        "WHERE'S THE POISON?",
+        "WHICH CUP?",
+        "SQUEAKY SQUEAK SQUEAKER",
+        "IS THAT MY VOICE?"
+    ],
+    correct: [
+        "YOU FOUND THE POISON!",
+        "KUZCO'S POISON!",
+        "A LLAMA?! HE'S SUPPOSED TO BE DEAD!",
+        "FEEL THE POWER!",
+        "BOOM, BABY!"
+    ],
+    wrong: [
+        "WRONG CUP!",
+        "WRONG LEVER!",
+        "WHY DO WE EVEN HAVE THAT LEVER?",
+        "YOU THREW OFF MY GROOVE!",
+        "BEWARE THE GROOVE!"
+    ],
+    gameOver: [
+        "YOU'VE BEEN TURNED INTO A LLAMA!",
+        "A LLAMA?!",
+        "SQUEAK SQUEAKER SQUEAKEN",
+        "IT'S CALLED A CRUEL IRONY"
+    ]
+};
+
+// Helper to get random quote from category
+function getRandomQuote(category) {
+    const quotes = QUOTES[category];
+    return quotes[Math.floor(Math.random() * quotes.length)];
+}
 
 // -----------------------------------------------------------------------------
 // GAME STATES
@@ -87,7 +143,7 @@ const GameState = {
 // -----------------------------------------------------------------------------
 // LEADERBOARD
 // -----------------------------------------------------------------------------
-const LEADERBOARD_KEY = 'morphCupShuffleLeaderboard';
+const LEADERBOARD_KEY = 'dinnerWithYzmaLeaderboard';
 const MAX_LEADERBOARD_ENTRIES = 10;
 const MAX_NAME_LENGTH = 10;
 
@@ -435,9 +491,10 @@ class Assets {
     async loadAll() {
         await Promise.all([
             this.loadImage('morphSheet', 'assets/morph-sprite-converter.png'),
-            // Add other assets here as needed:
-            // this.loadImage('cup', 'assets/cup.png'),
-            // this.loadImage('platform', 'assets/platform.png'),
+            this.loadImage('cupEmpty', 'assets/yzma-cup-empty.png'),
+            this.loadImage('cupFull', 'assets/yzma-cup-full.png'),
+            this.loadImage('handLeft', 'assets/kronk-glove1.png'),
+            this.loadImage('handRight', 'assets/kronk-glove2.png'),
         ]);
         this.loaded = true;
     }
@@ -446,16 +503,43 @@ class Assets {
      * Check if animated webp/gif exists for DOM fallback
      * @returns {boolean}
      */
-    hasMorphAnimation() {
+    hasPoisonAnimation() {
         return document.getElementById('morphGif') !== null;
     }
 
     draw(ctx, name, x, y, w, h, options = {}) {
-        if (this.images[name]) {
+        if (name === 'cup') {
+            // Use cup images with rotation
+            const hasPoison = options.hasPoison || false;
+            const liftAmount = options.liftAmount || 0;
+            const cupImage = hasPoison ? this.images['cupFull'] : this.images['cupEmpty'];
+
+            if (cupImage) {
+                this.drawCupImage(ctx, cupImage, x, y, w, h, liftAmount, options.highlight);
+            } else {
+                this.drawCup(ctx, x, y, w, h, options);
+            }
+        } else if (this.images[name]) {
             ctx.drawImage(this.images[name], x - w/2, y - h/2, w, h);
         } else {
             this.drawPlaceholder(ctx, name, x, y, w, h, options);
         }
+    }
+
+    drawCupImage(ctx, image, x, y, w, h, liftAmount, highlight) {
+        const drawY = y - liftAmount;
+
+        ctx.save();
+        ctx.drawImage(image, x - w/2, drawY - h/2, w, h);
+
+        // Add highlight effect if needed
+        if (highlight) {
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x - w/2, drawY - h/2, w, h);
+        }
+
+        ctx.restore();
     }
 
     drawPlaceholder(ctx, name, x, y, w, h, options = {}) {
@@ -597,19 +681,34 @@ class Assets {
     drawPlatform(ctx, x, y, w, h) {
         ctx.save();
 
+        // Purple tablecloth edge
+        ctx.fillStyle = '#4a2060';
+        ctx.beginPath();
+        ctx.ellipse(x, y + 8, w/2 + 15, h/2 + 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tablecloth gold trim
+        ctx.strokeStyle = '#d4af37';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(x, y + 5, w/2 + 10, h/2 + 5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Wooden table surface
         const gradient = ctx.createRadialGradient(x, y, 0, x, y, w/2);
-        gradient.addColorStop(0, CONFIG.COLORS.platform);
-        gradient.addColorStop(0.7, CONFIG.COLORS.platformShadow);
-        gradient.addColorStop(1, '#a0a0b0');
+        gradient.addColorStop(0, CONFIG.COLORS.platformHighlight || '#6b5240');
+        gradient.addColorStop(0.6, CONFIG.COLORS.platform);
+        gradient.addColorStop(1, CONFIG.COLORS.platformShadow);
 
         ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.ellipse(x, y, w/2, h/2, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        // Wood grain highlight
+        ctx.fillStyle = 'rgba(255, 220, 180, 0.15)';
         ctx.beginPath();
-        ctx.ellipse(x, y - h/4, w/3, h/6, 0, 0, Math.PI * 2);
+        ctx.ellipse(x - 30, y - h/6, w/4, h/8, -0.3, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
@@ -643,9 +742,9 @@ class CupShuffleGame {
         this.cupToSlot = [0, 1, 2]; // cup 0 in slot 0, cup 1 in slot 1, cup 2 in slot 2
         this.slotToCup = [0, 1, 2]; // slot 0 has cup 0, slot 1 has cup 1, slot 2 has cup 2
 
-        // Morph tracking
-        this.morphCupId = 1; // Which cup ID morph is under
-        this.morphVisible = false;
+        // Poison tracking
+        this.poisonCupId = 1; // Which cup ID has the poison
+        this.poisonVisible = false;
 
         // Game stats
         this.score = 0;
@@ -681,8 +780,19 @@ class CupShuffleGame {
         this.morphDomElement = null;
         this.useDomMorph = false;
 
+        // Hand animation state
+        this.handActive = false;
+        this.handCupId = -1;           // Which cup the hand is lifting
+        this.handSlot = -1;            // Which slot the cup is in (determines left/right)
+        this.handSide = 'left';        // 'left' or 'right'
+        this.handProgress = 0;         // 0 to 1 animation progress
+        this.handAnimatingIn = false;  // true when entering, false when exiting
+        this.centerHandAlternator = 0; // Alternates left/right for center slot
+        this.handReachCallback = null; // Called when hand reaches the cup
+        this.handReachCallbackFired = false;
+
         // Subtitle text
-        this.subtitle = 'CHOOSE YOUR CUP TO START!';
+        this.subtitle = getRandomQuote('intro');
 
         // Timing
         this.lastTime = performance.now();
@@ -736,8 +846,8 @@ class CupShuffleGame {
     updateMorphDomPosition() {
         if (!this.morphDomElement) return;
 
-        if (this.morphVisible) {
-            const morphCup = this.cups[this.morphCupId];
+        if (this.poisonVisible) {
+            const morphCup = this.cups[this.poisonCupId];
 
             // Size for the morph (adjust as needed)
             const morphWidth = 100;
@@ -758,6 +868,97 @@ class CupShuffleGame {
     }
 
     // -------------------------------------------------------------------------
+    // HAND ANIMATION
+    // -------------------------------------------------------------------------
+    startHandLift(cupId, lifting, onReachCup) {
+        if (lifting) {
+            // Starting to lift - hand enters first, then lifts cup
+            this.handCupId = cupId;
+            this.handSlot = this.cupToSlot[cupId];
+
+            // Determine which hand to use based on slot
+            if (this.handSlot === 0) {
+                this.handSide = 'left';
+            } else if (this.handSlot === 2) {
+                this.handSide = 'right';
+            } else {
+                // Center slot - alternate
+                this.handSide = (this.centerHandAlternator % 2 === 0) ? 'left' : 'right';
+                this.centerHandAlternator++;
+            }
+
+            this.handActive = true;
+            this.handAnimatingIn = true;
+            this.handProgress = 0;
+            this.handReachCallback = onReachCup || null;
+            this.handReachCallbackFired = false;
+        } else {
+            // Lowering - hand exits
+            this.handAnimatingIn = false;
+        }
+    }
+
+    updateHand(deltaTime) {
+        if (!this.handActive) return;
+
+        const speed = 1 / CONFIG.CUP_LIFT_DURATION; // Match cup lift speed
+
+        if (this.handAnimatingIn) {
+            this.handProgress += deltaTime * speed;
+            if (this.handProgress >= 1) {
+                this.handProgress = 1;
+                // Fire callback when hand reaches the cup
+                if (this.handReachCallback && !this.handReachCallbackFired) {
+                    this.handReachCallbackFired = true;
+                    this.handReachCallback();
+                }
+            }
+        } else {
+            this.handProgress -= deltaTime * speed;
+            if (this.handProgress <= 0) {
+                this.handProgress = 0;
+                this.handActive = false;
+                this.handCupId = -1;
+            }
+        }
+    }
+
+    drawHand(ctx) {
+        if (!this.handActive || this.handCupId < 0) return;
+
+        const cup = this.cups[this.handCupId];
+        const handImage = this.handSide === 'left'
+            ? this.assets.images['handLeft']
+            : this.assets.images['handRight'];
+
+        if (!handImage) return;
+
+        const w = CONFIG.HAND_WIDTH;
+        const h = CONFIG.HAND_HEIGHT;
+
+        // Calculate hand position based on progress
+        // Hand slides in from the side and up
+        const eased = Easing.easeInOut(this.handProgress);
+
+        // Target position: behind the cup, gripping it
+        // Position at cup center, offset slightly to the side, and follow the lift
+        const sideOffset = this.handSide === 'left' ? -20 : 20;
+        const targetX = cup.renderX + sideOffset;
+        const targetY = cup.renderY - cup.liftAmount; // Follow the cup as it lifts
+
+        // Start position: off-screen to the side and below
+        const offsetX = this.handSide === 'left' ? -250 : 250;
+        const offsetY = 200;
+
+        const currentX = targetX + offsetX * (1 - eased);
+        const currentY = targetY + offsetY * (1 - eased);
+
+        ctx.save();
+        ctx.drawImage(handImage, currentX - w / 2, currentY - h / 2, w, h);
+        ctx.restore();
+    }
+
+    // -------------------------------------------------------------------------
     // MAPPING MANAGEMENT
     // -------------------------------------------------------------------------
     resetMappings() {
@@ -771,6 +972,11 @@ class CupShuffleGame {
             this.cups[i].liftAmount = 0;
             this.cups[i].z = 0;
         }
+
+        // Reset hand state
+        this.handActive = false;
+        this.handCupId = -1;
+        this.handProgress = 0;
     }
 
     validateMappings() {
@@ -884,27 +1090,27 @@ class CupShuffleGame {
 
         switch (newState) {
             case GameState.INTRO:
-                this.subtitle = 'CHOOSE YOUR CUP TO START!';
+                this.subtitle = getRandomQuote('intro');
                 this.resetMappings();
                 break;
 
             case GameState.REVEAL_START:
-                this.subtitle = 'WATCH CLOSELY!';
-                this.morphVisible = true;
+                this.subtitle = getRandomQuote('watch');
+                this.poisonVisible = true;
 
-                // Reset animator so animation starts fresh
-                if (this.morphAnimator) {
-                    this.morphAnimator.reset();
-                }
-
-                const morphCup = this.cups[this.morphCupId];
-                morphCup.startLift(80, CONFIG.CUP_LIFT_DURATION, () => {
-                    this.stateTimer = setTimeout(() => {
-                        morphCup.startLift(0, CONFIG.CUP_LIFT_DURATION, () => {
-                            this.morphVisible = false;
-                            this.setState(GameState.SHUFFLING);
-                        });
-                    }, CONFIG.REVEAL_START_DURATION - CONFIG.CUP_LIFT_DURATION * 2);
+                const poisonCup = this.cups[this.poisonCupId];
+                // Hand reaches cup first, then lifts
+                this.startHandLift(this.poisonCupId, true, () => {
+                    poisonCup.startLift(80, CONFIG.CUP_LIFT_DURATION, () => {
+                        this.stateTimer = setTimeout(() => {
+                            // Cup lowers first, then hand retracts
+                            poisonCup.startLift(0, CONFIG.CUP_LIFT_DURATION, () => {
+                                this.startHandLift(this.poisonCupId, false);
+                                this.poisonVisible = false;
+                                this.setState(GameState.SHUFFLING);
+                            });
+                        }, CONFIG.REVEAL_START_DURATION - CONFIG.CUP_LIFT_DURATION * 2);
+                    });
                 });
                 break;
 
@@ -915,7 +1121,7 @@ class CupShuffleGame {
                 break;
 
             case GameState.GUESS:
-                this.subtitle = 'PICK A CUP!';
+                this.subtitle = getRandomQuote('guess');
                 this.selectedCupId = -1;
                 // Ensure all cups are not animating
                 this.cups.forEach(cup => {
@@ -925,44 +1131,58 @@ class CupShuffleGame {
                 break;
 
             case GameState.REVEAL_RESULT:
-                this.morphVisible = true;
-
-                // Reset animator so animation starts fresh
-                if (this.morphAnimator) {
-                    this.morphAnimator.reset();
-                }
+                this.poisonVisible = true;
 
                 const chosenCup = this.cups[this.selectedCupId];
 
                 if (this.guessCorrect) {
-                    this.subtitle = 'CORRECT!';
-                    chosenCup.startLift(80, CONFIG.CUP_LIFT_DURATION, () => {
-                        this.stateTimer = setTimeout(() => {
-                            this.setState(GameState.ROUND_END);
-                        }, CONFIG.REVEAL_RESULT_DURATION);
+                    this.subtitle = getRandomQuote('correct');
+                    // Hand reaches cup first, then lifts
+                    this.startHandLift(this.selectedCupId, true, () => {
+                        chosenCup.startLift(80, CONFIG.CUP_LIFT_DURATION, () => {
+                            this.stateTimer = setTimeout(() => {
+                                this.setState(GameState.ROUND_END);
+                            }, CONFIG.REVEAL_RESULT_DURATION);
+                        });
                     });
                 } else {
-                    this.subtitle = 'WRONG!';
-                    chosenCup.startLift(80, CONFIG.CUP_LIFT_DURATION, () => {
-                        this.stateTimer = setTimeout(() => {
-                            const correctCup = this.cups[this.morphCupId];
-                            correctCup.startLift(80, CONFIG.CUP_LIFT_DURATION, () => {
-                                this.stateTimer = setTimeout(() => {
-                                    this.setState(GameState.ROUND_END);
-                                }, CONFIG.REVEAL_RESULT_DURATION);
-                            });
-                        }, 500);
+                    this.subtitle = getRandomQuote('wrong');
+                    // Hand reaches cup first, then lifts
+                    this.startHandLift(this.selectedCupId, true, () => {
+                        chosenCup.startLift(80, CONFIG.CUP_LIFT_DURATION, () => {
+                            this.stateTimer = setTimeout(() => {
+                                const correctCup = this.cups[this.poisonCupId];
+                                // Hand reaches correct cup first, then lifts
+                                this.startHandLift(this.poisonCupId, true, () => {
+                                    correctCup.startLift(80, CONFIG.CUP_LIFT_DURATION, () => {
+                                        this.stateTimer = setTimeout(() => {
+                                            this.setState(GameState.ROUND_END);
+                                        }, CONFIG.REVEAL_RESULT_DURATION);
+                                    });
+                                });
+                            }, 500);
+                        });
                     });
                 }
                 break;
 
             case GameState.ROUND_END:
-                this.morphVisible = false;
-                this.cups.forEach(cup => {
-                    if (cup.liftAmount > 0) {
-                        cup.startLift(0, CONFIG.CUP_LIFT_DURATION, null);
-                    }
-                });
+                this.poisonVisible = false;
+                // Lower cups first, then retract hand
+                const liftedCups = this.cups.filter(cup => cup.liftAmount > 0);
+                if (liftedCups.length > 0) {
+                    liftedCups.forEach((cup, index) => {
+                        const isLast = index === liftedCups.length - 1;
+                        cup.startLift(0, CONFIG.CUP_LIFT_DURATION, isLast ? () => {
+                            // Retract hand after last cup is lowered
+                            if (this.handActive) {
+                                this.startHandLift(this.handCupId, false);
+                            }
+                        } : null);
+                    });
+                } else if (this.handActive) {
+                    this.startHandLift(this.handCupId, false);
+                }
 
                 if (this.guessCorrect) {
                     const points = CONFIG.BASE_SCORE + (this.streak * CONFIG.STREAK_BONUS);
@@ -995,7 +1215,7 @@ class CupShuffleGame {
                 break;
 
             case GameState.GAME_OVER:
-                this.subtitle = 'GAME OVER';
+                this.subtitle = getRandomQuote('gameOver');
                 // Check if score qualifies for leaderboard
                 if (this.score > 0 && this.leaderboard.qualifies(this.score)) {
                     this.stateTimer = setTimeout(() => {
@@ -1152,9 +1372,9 @@ class CupShuffleGame {
     startNewRound() {
         this.resetMappings();
 
-        // Randomize Morph's starting cup
-        this.morphCupId = this.rng.nextInt(0, 2);
-        this.morphVisible = false;
+        // Randomize poison's starting cup
+        this.poisonCupId = this.rng.nextInt(0, 2);
+        this.poisonVisible = false;
 
         this.setState(GameState.REVEAL_START);
     }
@@ -1165,8 +1385,8 @@ class CupShuffleGame {
         this.chances = CONFIG.INITIAL_CHANCES;
         this.round = 1;
         this.streak = 0;
-        this.morphCupId = 1;
-        this.morphVisible = false;
+        this.poisonCupId = 1;
+        this.poisonVisible = false;
         this.isSwapping = false;
         this.rng.setSeed(Date.now());
 
@@ -1186,7 +1406,7 @@ class CupShuffleGame {
             // Check against render positions
             for (const cup of this.cups) {
                 if (cup.containsPoint(x, y)) {
-                    this.morphCupId = cup.id;
+                    this.poisonCupId = cup.id;
                     this.setState(GameState.REVEAL_START);
                     return;
                 }
@@ -1199,7 +1419,7 @@ class CupShuffleGame {
             for (const cup of this.cups) {
                 if (cup.containsPoint(x, y)) {
                     this.selectedCupId = cup.id;
-                    this.guessCorrect = (cup.id === this.morphCupId);
+                    this.guessCorrect = (cup.id === this.poisonCupId);
                     this.setState(GameState.REVEAL_RESULT);
                     return;
                 }
@@ -1277,21 +1497,12 @@ class CupShuffleGame {
             cup.update(deltaTime);
         }
 
+        // Update hand animation
+        this.updateHand(deltaTime);
+
         // Update cursor blink for name entry
         if (this.state === GameState.NAME_ENTRY) {
             this.cursorBlinkTime += deltaTime;
-        }
-
-        // Update morph animation
-        if (this.useDomMorph) {
-            // DOM element animates automatically, just update position
-            this.updateMorphDomPosition();
-        } else if (this.morphAnimator) {
-            // Sprite sheet animator - only animate when visible
-            this.morphAnimator.setPaused(!this.morphVisible);
-            if (this.morphVisible) {
-                this.morphAnimator.update(deltaTime / 1000); // Convert ms to seconds
-            }
         }
     }
 
@@ -1321,34 +1532,27 @@ class CupShuffleGame {
             }
         }
 
-        // Draw Morph if visible
-        if (this.morphVisible) {
-            const morphCup = this.cups[this.morphCupId];
-            const morphX = morphCup.renderX;
-            const morphY = morphCup.renderY + CONFIG.CUP_HEIGHT / 2 - 20;
+        // Draw poison glow when revealed (no Morph sprite - the cup image shows the poison)
+        if (this.poisonVisible) {
+            const poisonCup = this.cups[this.poisonCupId];
+            const glowX = poisonCup.renderX;
+            const glowY = poisonCup.renderY + CONFIG.CUP_HEIGHT / 2 - poisonCup.liftAmount;
 
-            // If using DOM element for animation, it's handled by updateMorphDomPosition()
-            if (this.useDomMorph) {
-                // DOM element is positioned in update(), nothing to draw on canvas
-            } else if (this.morphAnimator) {
-                // Use sprite sheet animator
-                this.morphAnimator.draw(ctx, morphX, morphY, MORPH_SPRITE_CONFIG.scale, 'center');
-
-                // Debug: show sprite info
-                if (this.debugMode) {
-                    const img = this.morphAnimator.image;
-                    ctx.fillStyle = '#ff0';
-                    ctx.font = '12px monospace';
-                    ctx.fillText(`Sheet: ${img.naturalWidth}x${img.naturalHeight}`, morphX - 50, morphY + 60);
-                    ctx.fillText(`Frame: ${MORPH_SPRITE_CONFIG.frameWidth}x${MORPH_SPRITE_CONFIG.frameHeight}`, morphX - 50, morphY + 75);
-                    ctx.fillText(`Scale: ${MORPH_SPRITE_CONFIG.scale}`, morphX - 50, morphY + 90);
-                }
-            } else {
-                // Fallback to placeholder
-                this.assets.draw(ctx, 'morph', morphX, morphY,
-                    CONFIG.MORPH_WIDTH, CONFIG.MORPH_HEIGHT);
-            }
+            // Draw eerie green poison glow
+            ctx.save();
+            const gradient = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, 60);
+            gradient.addColorStop(0, 'rgba(127, 255, 0, 0.4)');
+            gradient.addColorStop(0.5, 'rgba(0, 255, 0, 0.2)');
+            gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.ellipse(glowX, glowY, 60, 30, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
         }
+
+        // Draw hand (behind cups)
+        this.drawHand(ctx);
 
         // Draw cup bodies
         for (const cup of sortedCups) {
@@ -1356,7 +1560,8 @@ class CupShuffleGame {
                 (this.state === GameState.INTRO || this.state === GameState.GUESS);
             this.assets.draw(ctx, 'cup', cup.renderX, cup.renderY, cup.width, cup.height, {
                 highlight: highlight,
-                liftAmount: cup.liftAmount
+                liftAmount: cup.liftAmount,
+                hasPoison: cup.id === this.poisonCupId
             });
         }
 
@@ -1424,7 +1629,7 @@ class CupShuffleGame {
         ctx.shadowBlur = 10;
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
-        ctx.fillText("MORPH'S CUP SHUFFLE", CONFIG.WIDTH / 2, CONFIG.TITLE_Y);
+        ctx.fillText("DINNER WITH YZMA", CONFIG.WIDTH / 2, CONFIG.TITLE_Y);
         ctx.restore();
 
         ctx.save();
@@ -1435,11 +1640,11 @@ class CupShuffleGame {
         ctx.fillText(this.subtitle, CONFIG.WIDTH / 2, CONFIG.SUBTITLE_Y);
         ctx.restore();
 
-        // HUD
+        // HUD - Yzma purple theme
         ctx.save();
         const hudGradient = ctx.createLinearGradient(150, CONFIG.HUD_Y - 30, 150, CONFIG.HUD_Y + 30);
-        hudGradient.addColorStop(0, 'rgba(30, 50, 80, 0.9)');
-        hudGradient.addColorStop(1, 'rgba(20, 30, 50, 0.9)');
+        hudGradient.addColorStop(0, 'rgba(74, 32, 96, 0.9)');
+        hudGradient.addColorStop(1, 'rgba(45, 20, 60, 0.9)');
         ctx.fillStyle = hudGradient;
 
         const hudWidth = 500;
@@ -1451,7 +1656,7 @@ class CupShuffleGame {
         ctx.roundRect(hudX, hudY, hudWidth, hudHeight, 30);
         ctx.fill();
 
-        ctx.strokeStyle = 'rgba(100, 150, 200, 0.5)';
+        ctx.strokeStyle = 'rgba(212, 175, 55, 0.6)';  // Gold trim
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore();
@@ -1485,9 +1690,9 @@ class CupShuffleGame {
     }
 
     drawNameEntry(ctx) {
-        // Semi-transparent overlay
+        // Semi-transparent purple overlay
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillStyle = CONFIG.COLORS.leaderboardBg;
         ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
         const centerX = CONFIG.WIDTH / 2;
@@ -1542,8 +1747,8 @@ class CupShuffleGame {
     drawLeaderboard(ctx) {
         ctx.save();
 
-        // Semi-transparent overlay
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+        // Semi-transparent purple overlay
+        ctx.fillStyle = CONFIG.COLORS.leaderboardBg;
         ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
         const centerX = CONFIG.WIDTH / 2;
@@ -1619,8 +1824,8 @@ class CupShuffleGame {
         const lines = [
             `State: ${this.state}`,
             `isSwapping: ${this.isSwapping}`,
-            `Morph under CUP ID: ${this.morphCupId}`,
-            `Morph visible: ${this.morphVisible}`,
+            `Poison under CUP ID: ${this.poisonCupId}`,
+            `Poison visible: ${this.poisonVisible}`,
             '',
             'MAPPINGS:',
             `cupToSlot: [${this.cupToSlot.join(', ')}]`,
@@ -1666,29 +1871,9 @@ window.addEventListener('load', async () => {
     // Load assets
     await game.assets.loadAll();
 
-    // Check for DOM-based animated morph first (preferred for webp/gif)
-    const morphDomEl = document.getElementById('morphSprite');
-    if (morphDomEl && morphDomEl.complete && morphDomEl.naturalWidth > 0) {
-        game.morphDomElement = morphDomEl;
-        game.useDomMorph = true;
-        console.log('Using DOM element for Morph animation (webp/gif)');
-    }
-    // Fallback to sprite sheet animator
-    else if (game.assets.images.morphSheet) {
-        game.morphAnimator = new SpriteSheetAnimator(
-            game.assets.images.morphSheet,
-            MORPH_SPRITE_CONFIG.frameWidth,
-            MORPH_SPRITE_CONFIG.frameHeight,
-            MORPH_SPRITE_CONFIG.totalFrames,
-            MORPH_SPRITE_CONFIG.columns,
-            MORPH_SPRITE_CONFIG.fps
-        );
-        game.useDomMorph = false;
-        console.log('Using sprite sheet for Morph animation');
-    } else {
-        game.useDomMorph = false;
-        console.log('No Morph animation found, using placeholder');
-    }
+    // Poison glow is rendered directly - no sprite needed
+    game.useDomMorph = false;
+    console.log('Dinner with Yzma loaded - using poison glow effect');
 
     window.game = game;
 });
