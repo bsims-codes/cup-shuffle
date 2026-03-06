@@ -495,6 +495,7 @@ class Assets {
             this.loadImage('cupFull', 'assets/yzma-cup-full.png'),
             this.loadImage('handLeft', 'assets/kronk-glove1.png'),
             this.loadImage('handRight', 'assets/kronk-glove2.png'),
+            this.loadImage('potion', 'assets/yzma-potion.png'),
         ]);
         this.loaded = true;
     }
@@ -780,7 +781,7 @@ class CupShuffleGame {
         this.morphDomElement = null;
         this.useDomMorph = false;
 
-        // Hand animation state
+        // Hand animation state (for single hand lift)
         this.handActive = false;
         this.handCupId = -1;           // Which cup the hand is lifting
         this.handSlot = -1;            // Which slot the cup is in (determines left/right)
@@ -790,6 +791,14 @@ class CupShuffleGame {
         this.centerHandAlternator = 0; // Alternates left/right for center slot
         this.handReachCallback = null; // Called when hand reaches the cup
         this.handReachCallbackFired = false;
+
+        // Shuffle hands state (for two-hand cup swapping)
+        this.shuffleHandsActive = false;
+        this.shuffleHandsProgress = 0; // 0 to 1 for reaching cups
+        this.shuffleHandsPhase = 'idle'; // 'reaching', 'holding', 'retracting'
+        this.leftHandCupId = -1;       // Cup held by left hand
+        this.rightHandCupId = -1;      // Cup held by right hand
+        this.shuffleCallback = null;   // Called when hands reach cups
 
         // Subtitle text
         this.subtitle = getRandomQuote('intro');
@@ -959,6 +968,108 @@ class CupShuffleGame {
     }
 
     // -------------------------------------------------------------------------
+    // SHUFFLE HANDS (Two hands for cup swapping)
+    // -------------------------------------------------------------------------
+    startShuffleHands(cupIdA, cupIdB, onReachCups) {
+        // Determine which cup is on the left and which is on the right
+        const slotA = this.cupToSlot[cupIdA];
+        const slotB = this.cupToSlot[cupIdB];
+
+        if (slotA < slotB) {
+            this.leftHandCupId = cupIdA;
+            this.rightHandCupId = cupIdB;
+        } else {
+            this.leftHandCupId = cupIdB;
+            this.rightHandCupId = cupIdA;
+        }
+
+        this.shuffleHandsActive = true;
+        this.shuffleHandsProgress = 0;
+        this.shuffleHandsPhase = 'reaching';
+        this.shuffleCallback = onReachCups || null;
+    }
+
+    updateShuffleHands(deltaTime) {
+        if (!this.shuffleHandsActive) return;
+
+        const reachSpeed = 1 / (CONFIG.CUP_LIFT_DURATION * 0.7); // Faster reach
+        const retractSpeed = 1 / (CONFIG.CUP_LIFT_DURATION * 0.5); // Fast retract
+
+        if (this.shuffleHandsPhase === 'reaching') {
+            this.shuffleHandsProgress += deltaTime * reachSpeed;
+            if (this.shuffleHandsProgress >= 1) {
+                this.shuffleHandsProgress = 1;
+                this.shuffleHandsPhase = 'holding';
+                // Fire callback when hands reach the cups
+                if (this.shuffleCallback) {
+                    this.shuffleCallback();
+                    this.shuffleCallback = null;
+                }
+            }
+        } else if (this.shuffleHandsPhase === 'retracting') {
+            this.shuffleHandsProgress -= deltaTime * retractSpeed;
+            if (this.shuffleHandsProgress <= 0) {
+                this.shuffleHandsProgress = 0;
+                this.shuffleHandsActive = false;
+                this.shuffleHandsPhase = 'idle';
+                this.leftHandCupId = -1;
+                this.rightHandCupId = -1;
+            }
+        }
+        // 'holding' phase - hands stay in place, controlled by swap animation
+    }
+
+    retractShuffleHands() {
+        if (this.shuffleHandsActive) {
+            this.shuffleHandsPhase = 'retracting';
+        }
+    }
+
+    drawShuffleHands(ctx) {
+        if (!this.shuffleHandsActive) return;
+
+        const leftImage = this.assets.images['handLeft'];
+        const rightImage = this.assets.images['handRight'];
+        if (!leftImage || !rightImage) return;
+
+        const w = CONFIG.HAND_WIDTH;
+        const h = CONFIG.HAND_HEIGHT;
+        const eased = Easing.easeInOut(this.shuffleHandsProgress);
+
+        // Draw left hand
+        if (this.leftHandCupId >= 0) {
+            const leftCup = this.cups[this.leftHandCupId];
+            const targetX = leftCup.renderX - 20;
+            const targetY = leftCup.renderY;
+
+            // Start from bottom-left
+            const startX = -100;
+            const startY = CONFIG.HEIGHT + 50;
+
+            const currentX = startX + (targetX - startX) * eased;
+            const currentY = startY + (targetY - startY) * eased;
+
+            ctx.drawImage(leftImage, currentX - w / 2, currentY - h / 2, w, h);
+        }
+
+        // Draw right hand
+        if (this.rightHandCupId >= 0) {
+            const rightCup = this.cups[this.rightHandCupId];
+            const targetX = rightCup.renderX + 20;
+            const targetY = rightCup.renderY;
+
+            // Start from bottom-right
+            const startX = CONFIG.WIDTH + 100;
+            const startY = CONFIG.HEIGHT + 50;
+
+            const currentX = startX + (targetX - startX) * eased;
+            const currentY = startY + (targetY - startY) * eased;
+
+            ctx.drawImage(rightImage, currentX - w / 2, currentY - h / 2, w, h);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // MAPPING MANAGEMENT
     // -------------------------------------------------------------------------
     resetMappings() {
@@ -977,6 +1088,13 @@ class CupShuffleGame {
         this.handActive = false;
         this.handCupId = -1;
         this.handProgress = 0;
+
+        // Reset shuffle hands state
+        this.shuffleHandsActive = false;
+        this.shuffleHandsProgress = 0;
+        this.shuffleHandsPhase = 'idle';
+        this.leftHandCupId = -1;
+        this.rightHandCupId = -1;
     }
 
     validateMappings() {
@@ -1305,13 +1423,116 @@ class CupShuffleGame {
                 // Fakeout: wiggle a cup without swapping
                 await this.doFakeout(move.slotA, move.duration);
             } else {
-                // Real swap
-                await this.startSwap(move.slotA, move.slotB, move.duration);
+                // Real swap with hands
+                const cupA = this.slotToCup[move.slotA];
+                const cupB = this.slotToCup[move.slotB];
+
+                // Hands reach for cups first
+                await this.handsReachForCups(cupA, cupB);
+
+                // Then swap (hands follow cups)
+                await this.startSwapWithHands(move.slotA, move.slotB, move.duration);
             }
         }
 
+        // Retract hands after shuffling
+        this.retractShuffleHands();
+
+        // Wait for hands to retract before allowing guess
+        await this.waitForHandsRetract();
+
         // Shuffling complete
         this.setState(GameState.GUESS);
+    }
+
+    handsReachForCups(cupIdA, cupIdB) {
+        return new Promise((resolve) => {
+            this.startShuffleHands(cupIdA, cupIdB, resolve);
+        });
+    }
+
+    waitForHandsRetract() {
+        return new Promise((resolve) => {
+            const checkRetract = () => {
+                if (!this.shuffleHandsActive) {
+                    resolve();
+                } else {
+                    requestAnimationFrame(checkRetract);
+                }
+            };
+            checkRetract();
+        });
+    }
+
+    startSwapWithHands(slotA, slotB, duration) {
+        return new Promise((resolve) => {
+            if (this.isSwapping) {
+                resolve();
+                return;
+            }
+
+            if (slotA === slotB) {
+                resolve();
+                return;
+            }
+
+            this.isSwapping = true;
+
+            // Get cup IDs in each slot
+            const cupA = this.slotToCup[slotA];
+            const cupB = this.slotToCup[slotB];
+
+            // UPDATE MAPPINGS IMMEDIATELY (before animation)
+            this.slotToCup[slotA] = cupB;
+            this.slotToCup[slotB] = cupA;
+            this.cupToSlot[cupA] = slotB;
+            this.cupToSlot[cupB] = slotA;
+
+            // Update which cups the hands are holding
+            this.leftHandCupId = (this.cupToSlot[cupA] < this.cupToSlot[cupB]) ? cupA : cupB;
+            this.rightHandCupId = (this.cupToSlot[cupA] < this.cupToSlot[cupB]) ? cupB : cupA;
+
+            this.validateMappings();
+
+            // Get cup objects
+            const cup1 = this.cups[cupA];
+            const cup2 = this.cups[cupB];
+
+            // Set up animations
+            cup1.fromX = cup1.renderX;
+            cup1.fromY = cup1.renderY;
+            cup1.toX = SLOTS[slotB].x;
+            cup1.toY = SLOTS[slotB].y;
+            cup1.animT = 0;
+            cup1.animDuration = duration;
+            cup1.arcHeight = 60;
+            cup1.animating = true;
+            cup1.z = 1;
+
+            cup2.fromX = cup2.renderX;
+            cup2.fromY = cup2.renderY;
+            cup2.toX = SLOTS[slotA].x;
+            cup2.toY = SLOTS[slotA].y;
+            cup2.animT = 0;
+            cup2.animDuration = duration;
+            cup2.arcHeight = -40;
+            cup2.animating = true;
+            cup2.z = 0;
+
+            const checkComplete = () => {
+                if (!cup1.animating && !cup2.animating) {
+                    cup1.snapToSlot(slotB);
+                    cup2.snapToSlot(slotA);
+                    cup1.z = 0;
+                    cup2.z = 0;
+                    this.isSwapping = false;
+                    resolve();
+                } else {
+                    requestAnimationFrame(checkComplete);
+                }
+            };
+            requestAnimationFrame(checkComplete);
+        });
     }
 
     // Fakeout animation - cup wiggles but doesn't swap
@@ -1497,8 +1718,9 @@ class CupShuffleGame {
             cup.update(deltaTime);
         }
 
-        // Update hand animation
+        // Update hand animations
         this.updateHand(deltaTime);
+        this.updateShuffleHands(deltaTime);
 
         // Update cursor blink for name entry
         if (this.state === GameState.NAME_ENTRY) {
@@ -1532,27 +1754,39 @@ class CupShuffleGame {
             }
         }
 
-        // Draw poison glow when revealed (no Morph sprite - the cup image shows the poison)
+        // Draw llama potion when cup is lifted
         if (this.poisonVisible) {
             const poisonCup = this.cups[this.poisonCupId];
-            const glowX = poisonCup.renderX;
-            const glowY = poisonCup.renderY + CONFIG.CUP_HEIGHT / 2 - poisonCup.liftAmount;
+            const potionImage = this.assets.images['potion'];
 
-            // Draw eerie green poison glow
-            ctx.save();
-            const gradient = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, 60);
-            gradient.addColorStop(0, 'rgba(127, 255, 0, 0.4)');
-            gradient.addColorStop(0.5, 'rgba(0, 255, 0, 0.2)');
-            gradient.addColorStop(1, 'rgba(0, 255, 0, 0)');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.ellipse(glowX, glowY, 60, 30, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
+            // Position potion behind the cup (on the table surface)
+            const potionX = poisonCup.renderX;
+            const potionY = poisonCup.renderY + 40; // Positioned at cup's base level
+            const potionWidth = 60;
+            const potionHeight = 75;
+
+            if (potionImage) {
+                ctx.save();
+                ctx.drawImage(potionImage,
+                    potionX - potionWidth / 2,
+                    potionY - potionHeight / 2,
+                    potionWidth,
+                    potionHeight);
+                ctx.restore();
+            } else {
+                // Fallback: draw a simple potion bottle shape
+                ctx.save();
+                ctx.fillStyle = '#ff69b4';
+                ctx.beginPath();
+                ctx.ellipse(potionX, potionY, 20, 30, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
         }
 
-        // Draw hand (behind cups)
+        // Draw hands (behind cups)
         this.drawHand(ctx);
+        this.drawShuffleHands(ctx);
 
         // Draw cup bodies
         for (const cup of sortedCups) {
@@ -1871,9 +2105,9 @@ window.addEventListener('load', async () => {
     // Load assets
     await game.assets.loadAll();
 
-    // Poison glow is rendered directly - no sprite needed
+    // Llama potion image is rendered under cups
     game.useDomMorph = false;
-    console.log('Dinner with Yzma loaded - using poison glow effect');
+    console.log('Dinner with Yzma loaded - using llama potion image');
 
     window.game = game;
 });
